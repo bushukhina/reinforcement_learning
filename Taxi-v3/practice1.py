@@ -2,6 +2,7 @@ import gym
 import gym_maze
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class Agent:
@@ -83,30 +84,36 @@ def get_elite_sessions(sessions, q_param):
 
     return elite_sessions
 
+def learn(q_param=0.1, episode_n=300, session_n=300, session_len=200):
+    env = gym.make('Taxi-v3')
+
+    n_states = env.observation_space.n
+    n_actions = env.action_space.n
+
+    agent = Agent(n_states, n_actions)
 
 
-env = gym.make('Taxi-v3')
+    mean_rewards = []
 
-n_states = env.observation_space.n
-n_actions = env.action_space.n
+    for episode in range(episode_n):
+        sessions = [get_session(env, agent, session_len) for _ in range(session_n)]
 
-agent = Agent(n_states, n_actions)
+        # Только для вывода в консоль. В алгоритме не используется
+        mean_total_reward = np.mean([session['total_reward'] for session in sessions])
+        print('mean_total_reward = ', mean_total_reward)
+        mean_rewards.append(mean_total_reward);
 
-episode_n = 200
-session_n = 400
-session_len = 10000
-q_param = 0.5
+        elite_sessions = get_elite_sessions(sessions, q_param)
 
-for episode in range(episode_n):
-    sessions = [get_session(env, agent, session_len) for _ in range(session_n)]
+        if len(elite_sessions) > 0:
+            agent.update_policy(elite_sessions)
 
-    # Только для вывода в консоль. В алгоритме не используется
-    mean_total_reward = np.mean([session['total_reward'] for session in sessions])
-    print('mean_total_reward = ', mean_total_reward)
+    get_session(env, agent, session_len, visual=True)
+    plt.plot([i for i in range(episode_n)], mean_rewards, 'g')
+    plt.axis([0, episode_n, -20, 20])
+    plt.xlabel('Episode number')
+    plt.ylabel('Mean reward')
+    plt.show()
 
-    elite_sessions = get_elite_sessions(sessions, q_param)
+learn()
 
-    if len(elite_sessions) > 0:
-        agent.update_policy(elite_sessions)
-
-get_session(env, agent, session_len, visual=True)

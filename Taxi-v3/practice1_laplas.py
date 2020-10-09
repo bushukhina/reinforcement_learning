@@ -2,12 +2,14 @@ import gym
 import gym_maze
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class Agent:
-    def __init__(self, state_n, action_n):
+    def __init__(self, state_n, action_n, laplas_param):
         self.state_n = state_n
         self.action_n = action_n
+        self.laplas_param = laplas_param
         self.policy = np.ones((state_n, action_n)) / action_n
 
     def get_action(self, state):
@@ -21,20 +23,17 @@ class Agent:
         for session in elite_sessions:
             for state, action in zip(session['states'], session['actions']):
                 new_policy[state][action] += 1
-                
+            
         for state in range(self.state_n):
-            if sum(new_policy[state]) == 0:
-                new_policy[state] += 1 / self.action_n
-            else:
-                new_policy[state] /= sum(new_policy[state])
-                
-        for state in range(self.state_n):
-            new_policy[state] =  policy_param * new_policy[state] + (1 - policy_param) * self.policy[state] 
+            new_policy[state] = (new_policy[state] + self.laplas_param) / (sum(new_policy[state]) + self.laplas_param * self.action_n)
 
-        self.policy = policy_param * new_policy + (1 - policy_param) * self.policy 
-
+        self.policy = new_policy
 
         return None
+
+
+#def get_state(obs):
+#    return obs[0] * 5 + obs[1]
 
 
 def get_session(env, agent, session_len, visual=False):
@@ -46,7 +45,7 @@ def get_session(env, agent, session_len, visual=False):
     
     for _ in range(session_len):
 
-        state = obs
+        state = obs                     # old: get_state(obs)
         states.append(state)
         
         action = agent.get_action(state)
@@ -83,31 +82,38 @@ def get_elite_sessions(sessions, q_param):
 
     return elite_sessions
 
+def learn(laplas_param=0.005,q_param=0.1, episode_n=300, session_n=300, session_len=200):
+    env = gym.make('Taxi-v3')
 
+    n_states = env.observation_space.n
+    n_actions = env.action_space.n
 
-env = gym.make('Taxi-v3')
+    agent = Agent(n_states, n_actions, laplas_param) 
 
-n_states = env.observation_space.n
-n_actions = env.action_space.n
+    mean_rewards = []
 
-agent = Agent(n_states, n_actions)
+    for episode in range(episode_n):
+        sessions = [get_session(env, agent, session_len) for _ in range(session_n)]
 
-episode_n = 200
-session_n = 400
-session_len = 10000
-q_param = 0.5
-policy_param = 0.6 
+        # Только для вывода в консоль. В алгоритме не используется
+        mean_total_reward = np.mean([session['total_reward'] for session in sessions])
+        #print('mean_total_reward = ', mean_total_reward)
+        mean_rewards.append(mean_total_reward);
 
-for episode in range(episode_n):
-    sessions = [get_session(env, agent, session_len) for _ in range(session_n)]
+        elite_sessions = get_elite_sessions(sessions, q_param)
 
-    # Только для вывода в консоль. В алгоритме не используется
-    mean_total_reward = np.mean([session['total_reward'] for session in sessions])
-    print('mean_total_reward = ', mean_total_reward)
+        if len(elite_sessions) > 0:
+            agent.update_policy(elite_sessions)
 
-    elite_sessions = get_elite_sessions(sessions, q_param)
+    plt.plot([i for i in range(episode_n)], mean_rewards, 'g')
+    plt.axis([0, episode_n, -20, 20])
+    plt.xlabel('Episode number')
+    plt.ylabel('Mean reward')
+    plt.title(f'Laplac coefitient {laplas_param}')
+    plt.show()
+    get_session(env, agent, session_len, visual=True)
 
-    if len(elite_sessions) > 0:
-        agent.update_policy(elite_sessions)
+learn(0.1)
+learn(0.01)
+learn(1)
 
-get_session(env, agent, session_len, visual=True)
